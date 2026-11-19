@@ -1,0 +1,46 @@
+[package]
+name = "openocd-link"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Uzak kart servisi: OpenOCD, dosya aktarımı ve komutlar için uçtan uca şifreli sunucusuz erişim"
+
+[dependencies]
+base64 = "0.23.1"
+blake2 = "0.11.0"
+clap = { version = "4.6.6", features = ["derive"] }
+crossterm = "0.29.0"
+dirs = "7.0.0"
+getrandom = "0.4.3"
+libc = "0.2.191"
+openocd-link-core = { path = "../openocd-link-core" }
+portable-pty = "0.9.0"
+rpassword = "7.5.4"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+signal-hook = "0.4.6"
+toml = "1.1.8"
+
+[package.metadata.deb]
+name = "openocd-link"
+section = "utils"
+revision = "16"
+priority = "optional"
+maintainer = "embedded-software-skills maintainers <https://github.com/ByTaymur/embedded-software-skills/issues>"
+depends = "libc6 (>= 2.24), libgcc1 | libgcc-s1, adduser"
+extended-description = """\
+Başka ağdaki bir bilgisayara takılı geliştirme kartına (ST-Link + OpenOCD) internet üzerinden, \
+sunucusuz ve uçtan uca şifreli erişim: OpenOCD Tcl/GDB tünelleri, dosya aktarımı, isteğe bağlı \
+exec ve kabuk."""
+maintainer-scripts = "../../packaging/linux/debian/"
+assets = [
+    ["target/release/openocd-link", "usr/bin/", "755"],
+    ["../../packaging/linux/openocd-link.toml", "usr/share/openocd-link/defaults/config.toml", "644"],
+    ["../../packaging/linux/raspberrypi-swd.cfg", "usr/share/openocd-link/defaults/raspberrypi-swd.cfg", "644"],
+    ["../../packaging/linux/stm32f730v8.cfg", "usr/share/openocd-link/defaults/stm32f730v8.cfg", "644"],
+    ["../../packaging/linux/openocd-stage/usr/lib/openocd-link/bin/openocd", "usr/lib/openocd-link/bin/", "755"],
+    ["../../packaging/linux/openocd-stage/usr/lib/openocd-link/share/**/*", "usr/lib/openocd-link/share/", "644"],
+    ["../../packaging/linux/openocd-link.service", "lib/systemd/system/openocd-link.service", "644"],
+    ["../../README.md", "usr/share/doc/openocd-link/README.md", "644"],
+]

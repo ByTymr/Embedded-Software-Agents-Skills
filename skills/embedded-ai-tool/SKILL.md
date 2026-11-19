@@ -38,6 +38,7 @@ target project's **profile** and data files, never in this skill.
 | Run native code from RAM | `ram_build`, `ram_load`, `ram_run` | `ram …` | live-control.md §RAM |
 | Build / flash / halt / reset | — (CLI only) | `build`, `flash`, `control` | usage.md |
 | Check the stub on the board | `stub_status` | `stub status` | stub-protocol.md |
+| Reach a board on **another network** (connection file / `OL1-` key) | — (CLI only) | `remote connect`, `remote put`, `flash` with `openocd.remote_files` | usage.md §Uzak kart, skill `remote-board-link` |
 
 Pin, measure, program and RAM features need the **stub** linked into the firmware
 ([stub/README.md](stub/README.md)); reads, `poke`, build and flash do not.

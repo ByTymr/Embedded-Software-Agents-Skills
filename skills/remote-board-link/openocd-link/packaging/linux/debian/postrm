@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+#DEBHELPER#
+if [ "$1" = "purge" ]; then
+    rm -rf /etc/openocd-link /var/lib/openocd-link
+    if getent passwd openocd-link >/dev/null; then
+        deluser --system openocd-link 2>/dev/null || true
+    fi
+fi
+exit 0

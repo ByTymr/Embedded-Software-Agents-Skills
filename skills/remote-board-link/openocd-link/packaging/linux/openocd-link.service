@@ -1,0 +1,23 @@
+[Unit]
+Description=openocd-link uzak kart servisi
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+# root olarak çalışır: Pi GPIO sürücüsü /dev/mem erişimi ister.
+ExecStart=/usr/bin/openocd-link serve --config /etc/openocd-link/config.toml
+Restart=on-failure
+RestartSec=5
+StateDirectory=openocd-link
+StateDirectoryMode=0700
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/openocd-link
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+# PrivateDevices kullanılmaz: OpenOCD'nin /dev/bus/usb erişimi gerekir.
+
+[Install]
+WantedBy=multi-user.target

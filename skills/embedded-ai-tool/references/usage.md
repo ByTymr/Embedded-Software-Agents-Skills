@@ -50,7 +50,8 @@ ara örnekler için de JSON satırı üretir. Hata durumunda çıkış kodu 1 ol
 | `artifact` | `project_root` göreli `path` ve dosyanın `sha256` değeri |
 | `variables` | İsim → sembol veya ham adres, tip ve isteğe bağlı yazma/erişim bilgisi |
 | `build` | Shell kullanmayan `argv` listesi, isteğe bağlı `timeout_s` |
-| `openocd` | `executable`, `config_files`, isteğe bağlı `shared_filesystem` |
+| `openocd` | `executable`, `config_files`, isteğe bağlı `shared_filesystem` ya da `remote_files` (ikisi birlikte `true` olamaz) |
+| `remote` | `remote_files=true` ise zorunlu: `session` (`[a-z0-9_-]`, 1..32), `openocd-link` oturum adı |
 | `live`, `pins` | Flash'a yazmadan RAM'den pin/çevre birimi kontrolü: [live-control.md](live-control.md) |
 
 Adres/boyutlar JSON tam sayısı veya `0x...` biçiminde metin olabilir. Sayısal
@@ -117,7 +118,11 @@ eski flash'ın önceden eşleşmesi gerekmez; hedef UID ve yüklenecek ELF hash'
 Hash'i doğrulanan ELF baytları kayıt klasöründe sabit bir imaja kopyalanır; eşzamanlı
 derleme yüklenen dosyayı değiştiremez. Bu imaj yerel firmware verisidir, yayımlanmaz.
 `openocd.shared_filesystem=true` yalnız sunucu gerçekten aynı ELF dosyasını görüyorsa
-açılır. Uzak dosya aktarımı yoktur. Uzun yüklemeler için `connection.timeout_s` değerini
+açılır. Kart başka ağdaysa `openocd.remote_files=true` ve `remote.session` kullanılır
+([remote-board-link](../../remote-board-link/SKILL.md)): oturumu `eat remote connect --key-file K
+--session S` açar, `flash --execute` dondurulmuş ELF baytlarını cihaza yükler (`eat-<sha16>.axf`),
+dönen SHA-256 ve mutlak yolu doğrular (tutmazsa karta hiç dokunulmaz) ve cihazdaki OpenOCD
+uzak yolu yazar. Gerçek kartla denenmemiştir. Uzun yüklemeler için `connection.timeout_s` değerini
 hedefe göre seç. Hata sonrası kart durmuş/yarım yazılmış olabilir; durumu yeniden oku.
 
 Kendi başına LLM/web sunucusu başlatılmaz. `eat mcp`, yapay zekâ istemcisinin stdio üzerinden
@@ -171,3 +176,18 @@ Bakım için skill klasöründe `python -m unittest discover -s tests -v`,
 `python -m ruff check scripts tests` ve `python -m compileall -q scripts` kullanılır.
 Testin atlanması veya hedef kartta yapılmayan işlemler ayrıca belirtilir; ham test
 ve build çıktıları skill kaynaklarına eklenmez.
+
+## Uzak kart (`eat remote`)
+
+Kart başka bir ağdaki bilgisayardaysa `openocd-link` ikilisi gerekir (`PATH`, `EAT_OPENOCD_LINK`
+ya da `--binary`; `eat doctor` bulunan yolu gösterir). Tünel açıkken profilin `connection`
+değeri değişmez: `127.0.0.1:6666`.
+
+| Komut | `--execute` |
+|---|---|
+| `eat remote connect --key-file K [--session S] [--map tcl=16666] [--timeout 60] [--binary B]` | Hayır |
+| `eat remote status`, `disconnect`, `ls`, `get NAME --out P [--force]`, `openocd status\|log` | Hayır |
+| `eat remote put FILE [--name N]`, `rm NAME`, `openocd start\|stop`, `exec [--cwd C] -- ARGV...` | **Evet** (yoksa yalnız plan) |
+
+`remote` komutları `--profile` istemez. Anahtar dosyasının yolu denetim kaydına girer, anahtar
+metni asla girmez. Etkileşimli kabuk için `openocd-link --session S shell` kullanılır.

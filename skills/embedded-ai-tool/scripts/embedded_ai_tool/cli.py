@@ -3,6 +3,7 @@ import argparse
 import contextlib
 import io
 import json
+import posixpath
 import queue
 import shutil
 import subprocess
@@ -13,6 +14,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+from . import remote
 from .core import (
     RPC,
     Device,
@@ -85,6 +87,7 @@ def parser():
     search = sub.add_parser("search")
     search.add_argument("query")
     search.add_argument("--limit", type=int, default=30)
+    remote_parser(sub)
     mcu = sub.add_parser("mcu-db", help="SVD ve kullanıcı eşlemesinden MCU veri dosyası üret")
     scaffold = mcu.add_subparsers(dest="action", required=True).add_parser("scaffold")
     scaffold.add_argument("--svd", type=Path, required=True)
@@ -179,6 +182,100 @@ def live_parser(sub):
     sub.add_parser("mcp", help="MCP (stdio) sunucusu: yapay zekâ araçları -> OpenOCD -> hedef RAM")
 
 
+def remote_parser(sub):
+    parent = argparse.ArgumentParser(add_help=False)
+    parent.add_argument("--session", default="default")
+    child = sub.add_parser("remote", help="openocd-link ile uzak kart oturumu")
+    rsub = child.add_subparsers(dest="remote_command", required=True)
+    connect = rsub.add_parser("connect", parents=[parent])
+    connect.add_argument("--key-file", type=Path, required=True)
+    connect.add_argument("--map", action="append", default=[], dest="maps")
+    connect.add_argument("--timeout", type=int, default=60)
+    connect.add_argument("--binary")
+    for name in ("status", "disconnect", "ls"):
+        rsub.add_parser(name, parents=[parent])
+    get = rsub.add_parser("get", parents=[parent])
+    get.add_argument("name")
+    get.add_argument("--out", type=Path, required=True)
+    get.add_argument("--force", action="store_true")
+    put = rsub.add_parser("put", parents=[parent])
+    put.add_argument("file", type=Path)
+    put.add_argument("--name")
+    rm = rsub.add_parser("rm", parents=[parent])
+    rm.add_argument("name")
+    ocd = rsub.add_parser("openocd", parents=[parent])
+    ocd.add_argument("action", choices=("status", "log", "start", "stop"))
+    execute = rsub.add_parser("exec", parents=[parent])
+    execute.add_argument("--cwd")
+    execute.add_argument("--timeout", type=int, default=60)
+    execute.add_argument("argv", nargs="+")
+    for name in ("put", "rm", "openocd", "exec"):
+        rsub.choices[name].add_argument("--execute", action="store_true")
+
+
+def link_info():
+    try:
+        prefix = remote.binary()
+        done = subprocess.run([*prefix, "--version"], stdin=subprocess.DEVNULL, capture_output=True,
+                              text=True, errors="replace", timeout=5, check=False)
+        return " ".join(prefix), done.stdout.strip() or None
+    except (ValueError, OSError, subprocess.SubprocessError):
+        return None, None
+
+
+def run_remote(args):
+    cmd = args.remote_command
+    if cmd == "connect":
+        remote.check_session(args.session)
+        prefix = remote.binary(args.binary)
+        return remote.connect(prefix, args.session, args.key_file.resolve(), args.maps, args.timeout,
+                              args.session_dir / "remote")
+    mutating = cmd in {"put", "rm", "exec"} or (cmd == "openocd" and args.action in {"start", "stop"})
+    if mutating and not args.execute:
+        plan = {"command": cmd, "session": remote.check_session(args.session)}
+        for key in ("file", "name", "action", "cwd", "timeout", "argv"):
+            if hasattr(args, key):
+                value = getattr(args, key)
+                plan[key] = str(value) if isinstance(value, Path) else value
+        return {"plan": plan, "executed": False}
+    prefix = remote.binary()
+    if cmd == "status":
+        return remote.status(prefix, args.session)
+    if cmd == "disconnect":
+        return remote.disconnect(prefix, args.session)
+    if cmd == "ls":
+        return remote.ls(prefix, args.session)
+    if cmd == "get":
+        return remote.get(prefix, args.session, args.name, args.out.resolve(), args.force)
+    if cmd == "put":
+        return remote.put(prefix, args.session, args.file.resolve(), args.name)
+    if cmd == "rm":
+        return remote.rm(prefix, args.session, args.name)
+    if cmd == "openocd":
+        return remote.openocd(prefix, args.session, args.action)
+    argv = args.argv[1:] if args.argv[0] == "--" else args.argv
+    if not argv:
+        raise ValueError("Çalıştırılacak komut gerekli")
+    return remote.exec(prefix, args.session, argv, args.cwd, args.timeout)
+
+
+def remote_name(image):
+    suffix = image.path.suffix.lower()
+    return f"eat-{image.sha[:16]}.{suffix[1:] if suffix in ('.axf', '.elf') else 'elf'}"
+
+
+def remote_upload(profile, staged, image):
+    """Uploads the frozen image; SHA-256 and path are checked before any RPC is sent."""
+    prefix = remote.binary()
+    result = remote.put(prefix, profile.remote_session, staged, remote_name(image))
+    if result.get("sha256") != image.sha:
+        raise ValueError("Uzak dosya SHA-256 değeri yerel görüntüyle eşleşmiyor")
+    path = result.get("path")
+    if not isinstance(path, str) or not posixpath.isabs(path):
+        raise ValueError("Uzak dosya yolu mutlak değil")
+    return path
+
+
 def init_project(directory, name):
     directory.mkdir(parents=True, exist_ok=True)
     profile = {
@@ -188,7 +285,8 @@ def init_project(directory, name):
         "read_ranges": [], "flash_ranges": [],
         "artifact": {"path": "build/firmware.elf", "sha256": "REPLACE_FROM_SYMBOLS_OUTPUT"},
         "variables": {}, "build": {"argv": [], "timeout_s": 120},
-        "openocd": {"executable": "openocd", "config_files": [], "shared_filesystem": False},
+        "openocd": {"executable": "openocd", "config_files": [], "shared_filesystem": False,
+                    "remote_files": False},
     }
     path = directory / "board.json"
     with path.open("x", encoding="utf-8") as stream:
@@ -251,8 +349,12 @@ def run(args):
         from .mcu_db import scaffold
 
         return scaffold(args.svd, args.map, args.out)
+    if args.command == "remote":
+        return run_remote(args)
     if args.command == "doctor":
+        link, link_version = link_info()
         return {"python": sys.version, "openocd": shutil.which("openocd"),
+                "openocd_link": link, "openocd_link_version": link_version,
                 "stub_sources": stub_sources(),
                 "transport": "openocd: OpenOCD Tcl RPC (default 6666), the debug probe is OpenOCD's adapter; serial: stub link over UART/USB (pyserial)",
                 "hardware_tested": False}
@@ -332,14 +434,24 @@ def run(args):
     elif args.command == "control":
         plan = {"action": args.action}
     elif args.command == "flash":
-        if profile.data["openocd"].get("shared_filesystem") is not True:
+        if profile.remote_session is None and profile.data["openocd"].get("shared_filesystem") is not True:
             raise ValueError("Flash için aynı dosya sistemindeki yerel OpenOCD gerekli; shared_filesystem=true ayarlayın")
         image = profile.artifact()
         image.regions(profile.data["flash_ranges"])
         plan = {"image": str(image.path), "sha256": image.sha,
                 "effect": "halt, flash erase/write, verify_image, reset run"}
+        if profile.remote_session is not None:
+            plan["remote_name"] = remote_name(image)
+            plan["effect"] = "upload to remote, " + plan["effect"]
     if plan is not None and not args.execute:
         return {"plan": plan, "executed": False}
+    if args.command == "flash" and profile.remote_session is not None:
+        # Upload the already hashed bytes before the board is touched at all.
+        staged = args.session_dir / (uuid.uuid4().hex + "_firmware.elf")
+        with staged.open("xb") as stream:
+            stream.write(image.raw)
+        plan["staged_image"] = str(staged)
+        plan["remote_path"] = remote_upload(profile, staged, image)
     if args.command == "watch" and (not 0.01 <= args.interval <= 60 or not 0 < args.duration <= 86400):
         raise ValueError("interval 0.01..60; duration 0..86400 gerekli")
     target = session.target if session else open_target(profile)
@@ -377,12 +489,15 @@ def run(args):
             action = {"halt": "halt", "resume": "resume", "reset-run": "reset run", "reset-halt": "reset halt"}[args.action]
             return {"command_response": openocd_only(target, "control").script(action), "action": args.action}
         if args.command == "flash":
-            # OpenOCD reads a file by path. Freeze the already hashed bytes so a
-            # concurrent rebuild cannot replace the file between validation and flash.
-            staged = args.session_dir / (uuid.uuid4().hex + "_firmware.elf")
-            with staged.open("xb") as stream:
-                stream.write(profile.artifact().raw)
-            path = tcl_string(staged.resolve().as_posix())
+            if plan.get("remote_path"):
+                path, staged = tcl_string(plan["remote_path"]), Path(plan["staged_image"])
+            else:
+                # OpenOCD reads a file by path. Freeze the already hashed bytes so a
+                # concurrent rebuild cannot replace the file between validation and flash.
+                staged = args.session_dir / (uuid.uuid4().hex + "_firmware.elf")
+                with staged.open("xb") as stream:
+                    stream.write(profile.artifact().raw)
+                path = tcl_string(staged.resolve().as_posix())
             response = openocd_only(target, "flash").script(f"halt; flash write_image erase {path}; verify_image {path}; reset run")
             return {"plan": plan, "staged_image": str(staged), "response": response, "verified": True}
     finally:

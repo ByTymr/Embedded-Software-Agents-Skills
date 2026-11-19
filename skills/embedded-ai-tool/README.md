@@ -57,7 +57,8 @@ and [measurement lessons (Turkish)](references/lessons.md) are included.
 | Stub core (mailbox, dead-man, RAM call) | MCU-independent C in `stub/`, tested on the host against the Python client; **no MCU port or real pin data is included** |
 | ST-Link V2/V3 with OpenOCD | Adapter configuration supported by OpenOCD; one ST-Link V3 + STM32F732 setup exercised, no other probe/MCU qualified |
 | Direct ST-Link without OpenOCD | Not implemented |
-| Remote flash file transfer, DWARF structs/arrays, breakpoints, RTOS view | Not implemented |
+| Remote board over the internet (`eat remote ...`, `openocd.remote_files`, flash through the device) | Wraps the `openocd-link` tool of the [`remote-board-link`](../remote-board-link/SKILL.md) skill; host-tested with a fake `openocd-link`, **not run against a real board** |
+| DWARF structs/arrays, breakpoints, RTOS view | Not implemented |
 
 Mutation commands default to a plan. Use `--execute` within the authorized task.
 A timeout may leave a write or flash outcome unknown; mutations are not retried.

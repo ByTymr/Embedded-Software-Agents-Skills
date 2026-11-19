@@ -3,6 +3,7 @@ import hashlib
 import io
 import json
 import math
+import re
 import socket
 import struct
 import subprocess
@@ -96,6 +97,7 @@ class Profile:
         self.name = self.data["name"]
         self.image = None
         self._svd = None  # loaded on first use: only SVD commands pay for parsing
+        self.remote_session = self.check_remote()
         if not require_target:
             return  # Build/search/server startup do not require a connected board's UID.
         self.connection = self.data["connection"]
@@ -129,6 +131,21 @@ class Profile:
                 raise ValueError("Geçersiz değişken tipi/yazma izni")
             if ("symbol" in spec) == ("address" in spec):
                 raise ValueError("Her değişkende yalnız symbol veya address gerekli")
+
+    def check_remote(self):
+        """openocd.remote_files: the board is behind an openocd-link session on another computer."""
+        config = self.data.get("openocd", {})
+        remote_files = config.get("remote_files", False)
+        if type(remote_files) is not bool:
+            raise ValueError("remote_files bool olmalı")
+        if remote_files and config.get("shared_filesystem") is True:
+            raise ValueError("remote_files ve shared_filesystem birlikte true olamaz")
+        if not remote_files:
+            return None
+        session = self.data.get("remote", {}).get("session")
+        if not isinstance(session, str) or not re.fullmatch(r"[a-z0-9_-]{1,32}", session):
+            raise ValueError("remote_files için remote.session ([a-z0-9_-], 1..32) gerekli")
+        return session
 
     def svd(self):
         from .svd import Device as SvdDevice

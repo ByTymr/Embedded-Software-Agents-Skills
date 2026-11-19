@@ -1,0 +1,64 @@
+#!/bin/sh
+# openocd-link kurulum sonrası: kullanıcı, yapılandırma, anahtar, servis. Tekrar çalıştırılabilir.
+set -e
+
+if [ "$1" = "configure" ]; then
+    if ! getent passwd openocd-link >/dev/null; then
+        adduser --system --group --home /var/lib/openocd-link --no-create-home \
+            --shell /usr/sbin/nologin openocd-link
+    fi
+    # ST-Link erişimi (Debian'ın openocd paketi udev kurallarında plugdev kullanır)
+    if getent group plugdev >/dev/null; then
+        usermod -a -G plugdev openocd-link
+    else
+        echo "ST-Link erişimi için OpenOCD udev kurallarını kontrol edin"
+    fi
+    install -d -m 0700 -o openocd-link -g openocd-link /var/lib/openocd-link
+    install -d -m 0750 -o root -g openocd-link /etc/openocd-link
+    NEW_GPIO_CONFIG=0
+    if [ ! -e /etc/openocd-link/raspberrypi-swd.cfg ]; then
+        NEW_GPIO_CONFIG=1
+    fi
+    for f in config.toml raspberrypi-swd.cfg stm32f730v8.cfg; do
+        if [ ! -e "/etc/openocd-link/$f" ]; then
+            install -m 0640 -o root -g openocd-link "/usr/share/openocd-link/defaults/$f" "/etc/openocd-link/$f"
+        fi
+    done
+    if [ ! -s /etc/openocd-link/key ]; then
+        /usr/bin/openocd-link keygen --force --out /etc/openocd-link/key >/dev/null
+    fi
+    chown openocd-link:openocd-link /etc/openocd-link/key
+    chmod 600 /etc/openocd-link/key
+    echo "Bağlantı anahtarı: /etc/openocd-link/key (yetkili kullanıcıya güvenli biçimde aktarın)"
+    # Pi modeline göre GPIO adres tabanı (openocd-stm32f730 paketindeki yöntem)
+    PI_MODEL="$(tr -d '\0' < /proc/device-tree/model 2>/dev/null || echo)"
+    case "$PI_MODEL" in
+        *"Raspberry Pi 5"*|*"Raspberry Pi 4"*|*"Raspberry Pi 400"*) PI_BASE=0xFE000000 ;;
+        *"Raspberry Pi 3"*|*"Raspberry Pi Zero 2"*|*"Compute Module 3"*) PI_BASE=0x3F000000 ;;
+        *) PI_BASE=0x20000000 ;;
+    esac
+    if [ "$NEW_GPIO_CONFIG" = 1 ] && [ -n "$PI_MODEL" ] && [ -f /etc/openocd-link/raspberrypi-swd.cfg ]; then
+        sed -i "s/peripheral_base 0x[0-9A-Fa-f]*/peripheral_base $PI_BASE/" /etc/openocd-link/raspberrypi-swd.cfg
+    fi
+    sync
+    udevadm control --reload-rules 2>/dev/null || true
+    udevadm trigger 2>/dev/null || true
+    echo "Yapılandırmadaki [openocd].args değerini kartınıza göre düzenleyin: /etc/openocd-link/config.toml"
+    echo "Ardından: sudo systemctl restart openocd-link"
+fi
+
+#DEBHELPER#
+
+# Servis yalnızca kurulumda başlar; yeniden başlatmada kendiliğinden açılmaz.
+# Bu adım otomatik eklenen bölümlerden SONRA gelir, böylece hiçbiri servisi yeniden etkinleştiremez.
+if [ "$1" = "configure" ]; then
+    deb-systemd-helper disable openocd-link.service >/dev/null 2>&1 || true
+    systemctl disable openocd-link.service >/dev/null 2>&1 || true
+    rm -f /etc/systemd/system/multi-user.target.wants/openocd-link.service
+    # Yalnız kurulumda başlar (açılışta etkin değil)
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        systemctl restart openocd-link.service || true
+    fi
+fi
+exit 0

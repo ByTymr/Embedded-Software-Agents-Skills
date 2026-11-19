@@ -1,0 +1,4 @@
+target/
+packaging/linux/preset.key
+PI-KURULUM/
+packaging/linux/openocd-stage/

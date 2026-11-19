@@ -1,4 +1,4 @@
-# embedded-software-skills
+# Embedded Software Agents & Skills
 
 ![How the repo works: rule, board, code, evidence, record](docs/media/repo-simulasyonu.gif)
 
@@ -26,6 +26,7 @@ a running microcontroller over a debug probe or a serial link, for any MCU famil
 | The user wants to… | Use | Entry point |
 | --- | --- | --- |
 | Read, measure or change what a **connected board** does (registers, variables, pins, PWM, signals, a live program), check board identity, build or flash | `embedded-ai-tool` | [SKILL.md](skills/embedded-ai-tool/SKILL.md); MCP tools `mcp__embedded-ai-tool__*` if registered |
+| Reach a board on **another network** (a Raspberry Pi with an ST-Link) over the internet, serverless and encrypted; Tcl/GDB tunnels, file transfer, remote OpenOCD | `remote-board-link` | [SKILL.md](skills/remote-board-link/SKILL.md) |
 | Work on an **STM32 / Cortex-M firmware project** (CubeMX `.ioc`, HAL/LL, timers, ADC, DMA, ISRs, FreeRTOS, build/flash discipline) | `stm32-firmware-workflow` | [SKILL.md](skills/stm32-firmware-workflow/SKILL.md), commands in `skills/stm32-firmware-workflow/commands/` |
 | **Edit firmware C/H source** only, with a per-session QA log, no build or flash | `firmware-source-editor` | [SKILL.md](skills/firmware-source-editor/SKILL.md) |
 | Have **two agents do the same task independently** and cross-check plans and results | `ikiz` | [SKILL.md](skills/ikiz/SKILL.md) |
@@ -35,6 +36,12 @@ a running microcontroller over a debug probe or a serial link, for any MCU famil
 
 Skills combine: a typical firmware change uses `stm32-firmware-workflow` for discipline,
 `firmware-source-editor` for the edit and `embedded-ai-tool` to measure before and after.
+
+Use the [OpenOCD Link agent](agents/openocd-link.md) for remote board sessions. It hands
+the verified tunnel endpoints to `embedded-ai-tool` for target identification and measurements.
+Use [handoff](commands/handoff.md) and [resume](commands/resume.md) to continue in a new
+chat. See [security and release practices](SECURITY.md) for private data handling and
+verification requirements.
 
 ## Install
 

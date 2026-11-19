@@ -1,0 +1,36 @@
+key_file = "/etc/openocd-link/key"
+udp_port = 47123        # sabit: istemci son adresi saklayıp doğrudan bağlanır. 0: rastgele.
+device_name = ""        # boş: makine adı
+connect_to = []         # istemcinin sabit adresi, örn. ["203.0.113.10:47124"] (modemde UDP yönlendirmeli)
+poll_secs = 4           # istemci kaydını DHT'de arama aralığı, 2..60
+
+[[forward]]
+name = "tcl"
+port = 6666
+
+[[forward]]
+name = "gdb"
+port = 3333
+
+[files]
+enabled = true
+dir = "/var/lib/openocd-link/files"
+max_file_mb = 64        # 1..1024
+max_total_mb = 1024     # max_file_mb..65536
+
+[openocd]
+enabled = true
+executable = "/usr/lib/openocd-link/bin/openocd"   # pakete dahil OpenOCD 0.12
+args = ["-f", "/etc/openocd-link/raspberrypi-swd.cfg", "-f", "/etc/openocd-link/stm32f730v8.cfg"]   # karta göre DEĞİŞTİR
+tcl_port = 6666
+gdb_port = 3333
+autostart = false
+
+[exec]
+enabled = false
+timeout_max_s = 600     # 1..3600
+
+[shell]
+enabled = false
+program = "/bin/bash"
+args = ["-l"]
