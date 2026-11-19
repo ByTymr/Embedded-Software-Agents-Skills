@@ -148,7 +148,7 @@ def openocd(prefix, session, action):
     return call(prefix, session, ["openocd", action])
 
 
-def exec(prefix, session, argv, cwd=None, timeout=60):  # noqa: A001 -- plandaki işlev adı.
+def exec(prefix, session, argv, cwd=None, timeout=60):
     args = ["exec", "--timeout", str(timeout)]
     if cwd:
         args += ["--cwd", cwd]

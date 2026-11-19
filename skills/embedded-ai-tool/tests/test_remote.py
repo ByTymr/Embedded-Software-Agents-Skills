@@ -8,9 +8,9 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from embedded_ai_tool import cli, remote  # noqa: E402
-from embedded_ai_tool.cli import parser, run  # noqa: E402
-from embedded_ai_tool.core import Profile  # noqa: E402
+from embedded_ai_tool import cli, remote
+from embedded_ai_tool.cli import parser, run
+from embedded_ai_tool.core import Profile
 
 FAKE = textwrap.dedent('''
     import json, signal, sys, time
